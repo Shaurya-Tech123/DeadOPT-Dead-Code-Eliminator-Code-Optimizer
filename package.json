@@ -1,0 +1,21 @@
+{
+  "name": "deadopt",
+  "version": "1.0.0",
+  "description": "Multi-Language Dead Code Optimizer - Production SaaS Platform",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd backend && nodemon server.js",
+    "client": "cd frontend && npm run dev",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && node server.js"
+  },
+  "keywords": ["dead-code", "optimizer", "compiler", "saas"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "devDependencies": {}
+}
