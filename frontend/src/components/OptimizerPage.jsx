@@ -1,14 +1,21 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import axios from 'axios';
 
-const OptimizerPage = ({ initialResult, onBack, onAdmin }) => {
+const OptimizerPage = ({ initialSession, onBack, onAdmin }) => {
   const [language, setLanguage] = useState('python');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(initialResult || null);
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+  useEffect(() => {
+    if (!initialSession) return;
+    if (initialSession.language) setLanguage(initialSession.language);
+    if (typeof initialSession.code === 'string') setCode(initialSession.code);
+    if (initialSession.result) setResult(initialSession.result);
+  }, [initialSession]);
+
 
   const languageConfig = {
     python: { label: 'Python', extension: '.py', monacoLang: 'python' },
@@ -212,13 +219,101 @@ const OptimizerPage = ({ initialResult, onBack, onAdmin }) => {
         </div>
       </div>
 
-      {/* Optimization Report */}
-      {result?.report && (
-        <div className="max-w-7xl mx-auto mt-6 bg-dark-card rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4 text-accent">Optimization Report</h2>
-          <pre className="bg-dark-surface p-4 rounded-lg overflow-x-auto text-sm">
-            {JSON.stringify(result.report, null, 2)}
-          </pre>
+      {result && (
+        <div className="max-w-7xl mx-auto mt-6 space-y-6">
+          <div className="bg-dark-card rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 text-accent">Summary</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-dark-surface rounded-lg p-4">
+                <p className="text-sm text-gray-400">Language</p>
+                <p className="text-lg font-semibold">{result.report?.summary?.language || language}</p>
+              </div>
+              <div className="bg-dark-surface rounded-lg p-4">
+                <p className="text-sm text-gray-400">Lines Removed</p>
+                <p className="text-lg font-semibold text-accent">{result.report?.summary?.linesRemoved ?? result.linesRemoved}</p>
+              </div>
+              <div className="bg-dark-surface rounded-lg p-4">
+                <p className="text-sm text-gray-400">Improvement</p>
+                <p className="text-lg font-semibold text-green-400">{result.report?.summary?.improvementPercent ?? 0}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-dark-card rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 text-accent">Optimizations Applied</h2>
+            <ul className="list-disc pl-6 space-y-1 text-gray-200">
+              {(result.report?.optimizationsApplied || []).map((opt, idx) => (
+                <li key={`${opt}-${idx}`}>{opt}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="bg-dark-card rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 text-accent">Before vs After</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-semibold mb-2 text-gray-300">Before</h3>
+                <pre className="bg-dark-surface p-4 rounded-lg overflow-auto max-h-72 text-sm">{result.report?.beforeAfter?.before || code}</pre>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2 text-gray-300">After</h3>
+                <pre className="bg-dark-surface p-4 rounded-lg overflow-auto max-h-72 text-sm">{result.report?.beforeAfter?.after || result.optimizedCode}</pre>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-dark-card rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4 text-accent">Complexity Impact</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-dark-surface rounded-lg p-4">
+                <p className="text-sm text-gray-400">Before</p>
+                <p className="text-lg font-semibold">{result.report?.complexityImpact?.before ?? '-'}</p>
+              </div>
+              <div className="bg-dark-surface rounded-lg p-4">
+                <p className="text-sm text-gray-400">After</p>
+                <p className="text-lg font-semibold">{result.report?.complexityImpact?.after ?? '-'}</p>
+              </div>
+              <div className="bg-dark-surface rounded-lg p-4">
+                <p className="text-sm text-gray-400">Delta</p>
+                <p className="text-lg font-semibold text-green-400">{result.report?.complexityImpact?.delta ?? '-'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-dark-card rounded-lg p-6 overflow-auto">
+            <h2 className="text-xl font-semibold mb-4 text-accent">Symbol Table</h2>
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-dark-surface">
+                  <th className="py-2">Variable Name</th>
+                  <th className="py-2">Type</th>
+                  <th className="py-2">Scope</th>
+                  <th className="py-2">Line Declared</th>
+                  <th className="py-2">Usage Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(result.symbolTable || []).map((row, idx) => (
+                  <tr key={`${row.name}-${idx}`} className="border-b border-dark-surface/40">
+                    <td className="py-2">{row.name}</td>
+                    <td className="py-2">{row.type}</td>
+                    <td className="py-2">{row.scope}</td>
+                    <td className="py-2">{row.lineDeclared}</td>
+                    <td className="py-2">{row.usageCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <button
+              onClick={handleDownload}
+              className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-all"
+            >
+              📥 Download Optimized Code
+            </button>
+          </div>
         </div>
       )}
     </div>

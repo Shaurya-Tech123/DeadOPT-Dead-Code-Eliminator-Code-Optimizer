@@ -1,13 +1,15 @@
-import express from 'express';
+import { spawn } from 'child_process';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { spawn } from 'child_process';
-import multer from 'multer';
+import express from 'express';
 import fs from 'fs';
-import path from 'path';
+import mongoose from 'mongoose';
+import multer from 'multer';
+import path, {
+  dirname,
+  join,
+} from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -16,6 +18,10 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const tempDir = join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
 
 // Middleware
 app.use(cors({
@@ -42,7 +48,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
 // MongoDB Connection
@@ -50,8 +56,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/deadopt',
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('✅ MongoDB Connected'))
-.catch(err => console.error('❌ MongoDB Connection Error:', err));
+.then(() => console.log(' MongoDB Connected'))
+.catch(err => console.error(' MongoDB Connection Error:', err));
 
 // Optimization History Schema
 const optimizationSchema = new mongoose.Schema({
@@ -60,9 +66,8 @@ const optimizationSchema = new mongoose.Schema({
   optimizedCode: { type: String, required: true },
   linesRemoved: { type: Number, default: 0 },
   report: { type: Object, required: true },
-  timestamp: { type: Date, default: Date.now },
-  ipAddress: String,
-  userAgent: String
+  createdAt: { type: Date, default: Date.now },
+  userAgent: String,
 });
 
 const Optimization = mongoose.model('Optimization', optimizationSchema);
@@ -75,7 +80,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Optimize code endpoint
-app.post('/api/optimize', async (req, res) => {
+app.post(['/api/optimize', '/optimize'], async (req, res) => {
   try {
     const { code, language } = req.body;
 
@@ -88,11 +93,6 @@ app.post('/api/optimize', async (req, res) => {
     }
 
     // Create temporary file
-    const tempDir = join(__dirname, 'temp');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
     const extMap = {
       'c': '.c',
       'cpp': '.cpp',
@@ -125,14 +125,14 @@ app.post('/api/optimize', async (req, res) => {
     // Save to MongoDB
     const optimization = new Optimization({
       ...optimizationData,
-      ipAddress: req.ip,
       userAgent: req.headers['user-agent']
     });
     await optimization.save();
 
     res.json({
       success: true,
-      ...optimizationData
+      ...optimizationData,
+      symbolTable: result.symbolTable || []
     });
 
   } catch (error) {
@@ -189,14 +189,14 @@ app.post('/api/optimize/upload', upload.single('file'), async (req, res) => {
     // Save to MongoDB
     const optimization = new Optimization({
       ...optimizationData,
-      ipAddress: req.ip,
       userAgent: req.headers['user-agent']
     });
     await optimization.save();
 
     res.json({
       success: true,
-      ...optimizationData
+      ...optimizationData,
+      symbolTable: result.symbolTable || []
     });
 
   } catch (error) {
@@ -210,7 +210,7 @@ app.get('/api/history', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const optimizations = await Optimization.find()
-      .sort({ timestamp: -1 })
+      .sort({ createdAt: -1 })
       .limit(limit)
       .select('-originalCode -optimizedCode'); // Exclude large fields
 
@@ -221,18 +221,30 @@ app.get('/api/history', async (req, res) => {
   }
 });
 
-// Admin: Get all logs
-app.get('/api/admin/logs', async (req, res) => {
+app.get(['/history', '/api/admin/logs'], async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 100;
-    const optimizations = await Optimization.find()
-      .sort({ timestamp: -1 })
-      .limit(limit);
-
+    const query = Optimization.find().sort({ createdAt: -1 });
+    if (req.query.limit) {
+      query.limit(parseInt(req.query.limit));
+    }
+    const optimizations = await query;
     res.json({ success: true, data: optimizations });
   } catch (error) {
-    console.error('Admin logs error:', error);
+    console.error('History logs error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/history/:id', async (req, res) => {
+  try {
+    const deleted = await Optimization.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'History item not found' });
+    }
+    return res.json({ success: true, message: 'History item deleted successfully' });
+  } catch (error) {
+    console.error('Delete history error:', error);
+    return res.status(500).json({ error: 'Failed to delete history item' });
   }
 });
 

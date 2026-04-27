@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const AdminDashboard = ({ onBack }) => {
+const AdminDashboard = ({ onBack, onOpenItem }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -13,7 +13,7 @@ const AdminDashboard = ({ onBack }) => {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/admin/logs?limit=100');
+      const response = await axios.get('http://localhost:5000/history?limit=100');
       if (response.data.success) {
         setLogs(response.data.data);
       }
@@ -26,6 +26,35 @@ const AdminDashboard = ({ onBack }) => {
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  const downloadCode = (code, language, kind = 'optimized') => {
+    const blob = new Blob([code || ''], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    let ext = '.txt';
+    if (language === 'c') ext = '.c';
+    if (language === 'cpp') ext = '.cpp';
+    if (language === 'java') ext = '.java';
+    if (language === 'python') ext = '.py';
+
+    link.setAttribute('download', `${kind}_code${ext}`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const deleteItem = async (id) => {
+    try {
+      await axios.delete(`http://localhost:5000/history/${id}`);
+      await fetchLogs();
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.error || 'Failed to delete history item');
+    }
   };
 
   return (
@@ -74,9 +103,9 @@ const AdminDashboard = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Logs Table */}
+        {/* History Cards */}
         <div className="bg-dark-card rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4 text-accent">Optimization Logs</h2>
+          <h2 className="text-xl font-semibold mb-4 text-accent">Optimization History</h2>
           
           {loading ? (
             <div className="text-center py-8 text-gray-400">Loading logs...</div>
@@ -85,31 +114,40 @@ const AdminDashboard = ({ onBack }) => {
           ) : logs.length === 0 ? (
             <div className="text-center py-8 text-gray-400">No logs found</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-accent/30">
-                    <th className="text-left p-3 text-gray-300">Timestamp</th>
-                    <th className="text-left p-3 text-gray-300">Language</th>
-                    <th className="text-left p-3 text-gray-300">Lines Removed</th>
-                    <th className="text-left p-3 text-gray-300">IP Address</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => (
-                    <tr key={log._id} className="border-b border-dark-surface hover:bg-dark-surface transition-colors">
-                      <td className="p-3 text-gray-400 text-sm">{formatDate(log.timestamp)}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-1 bg-accent/20 text-accent rounded text-sm font-semibold">
-                          {log.language.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="p-3 text-accent font-semibold">{log.linesRemoved}</td>
-                      <td className="p-3 text-gray-400 text-sm">{log.ipAddress || 'N/A'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {logs.map((log) => (
+                <div key={log._id} className="bg-dark-surface rounded-lg p-4 border border-accent/10">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="px-2 py-1 bg-accent/20 text-accent rounded text-sm font-semibold">
+                      {(log.language || 'unknown').toUpperCase()}
+                    </span>
+                    <span className="text-xs text-gray-400">{formatDate(log.createdAt || log.timestamp)}</span>
+                  </div>
+                  <div className="text-sm text-gray-300 mb-4">
+                    Lines Removed: <span className="text-accent font-semibold">{log.linesRemoved || 0}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => onOpenItem?.(log)}
+                      className="px-3 py-2 bg-accent text-dark-bg rounded hover:bg-accent-hover font-semibold"
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => downloadCode(log.optimizedCode, log.language, 'optimized')}
+                      className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-semibold"
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={() => deleteItem(log._id)}
+                      className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-semibold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

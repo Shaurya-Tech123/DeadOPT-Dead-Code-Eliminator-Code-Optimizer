@@ -1,15 +1,31 @@
+import './App.css';
+
 import { useState } from 'react';
+
+import AdminDashboard from './components/AdminDashboard';
 import LandingPage from './components/LandingPage';
 import OptimizerPage from './components/OptimizerPage';
-import AdminDashboard from './components/AdminDashboard';
-import './App.css';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('landing');
-  const [optimizationResult, setOptimizationResult] = useState(null);
+  const [optimizerSession, setOptimizerSession] = useState(null);
 
   const handleOptimize = (result) => {
-    setOptimizationResult(result);
+    setOptimizerSession(result);
+    setCurrentPage('optimizer');
+  };
+
+  const handleOpenHistoryItem = (item) => {
+    setOptimizerSession({
+      code: item.originalCode || '',
+      language: item.language || 'python',
+      result: {
+        optimizedCode: item.optimizedCode || '',
+        report: item.report || {},
+        symbolTable: item.symbolTable || [],
+        linesRemoved: item.linesRemoved || 0,
+      },
+    });
     setCurrentPage('optimizer');
   };
 
@@ -23,13 +39,16 @@ function App() {
       )}
       {currentPage === 'optimizer' && (
         <OptimizerPage 
-          initialResult={optimizationResult}
+          initialSession={optimizerSession}
           onBack={() => setCurrentPage('landing')}
-          onAdmin={() => setCurrentPage('admin')}
+          onAdmin={() => setCurrentPage('Dashboard')}
         />
       )}
-      {currentPage === 'admin' && (
-        <AdminDashboard onBack={() => setCurrentPage('optimizer')} />
+      {currentPage === 'Dashboard' && (
+        <AdminDashboard
+          onBack={() => setCurrentPage('optimizer')}
+          onOpenItem={handleOpenHistoryItem}
+        />
       )}
     </div>
   );
